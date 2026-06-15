@@ -192,10 +192,14 @@ st.divider()
 # ---------------------------------------------------------------------------
 st.markdown('<div class="section-hdr">Upload Engineering Drawing</div>', unsafe_allow_html=True)
 
+if "upload_key" not in st.session_state:
+    st.session_state["upload_key"] = 0
+
 uploaded = st.file_uploader(
     "Drag and drop or click to browse — JPG, JPEG, PNG",
     type=["jpg", "jpeg", "png"],
     label_visibility="visible",
+    key=f"uploader_{st.session_state['upload_key']}",
 )
 
 if not uploaded:
@@ -215,6 +219,10 @@ with col_meta:
     st.markdown(f"- **Dimensions:** {image.width} x {image.height} px")
     st.divider()
     run_btn = st.button("Run Analysis", type="primary", use_container_width=True)
+    if st.button("Upload New Image", use_container_width=True):
+        st.session_state["upload_key"] += 1
+        st.session_state.pop("results", None)
+        st.rerun()
 
 if not run_btn and "results" not in st.session_state:
     st.stop()
