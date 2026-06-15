@@ -445,39 +445,38 @@ st.markdown("### 2. Product Name / Model Number Identified")
 if bedrock_r.error:
     st.error(f"Bedrock error: {bedrock_r.error}")
 elif bedrock_r.products:
-    for i, p in enumerate(bedrock_r.products, 1):
-        conf_pct   = round(p.confidence * 100)
-        conf_color = score_color(conf_pct)
-        st.markdown(
-            f"""
-            <div style="background:#f0fdf4;border:1px solid #86efac;border-radius:8px;
-                        padding:20px;margin-bottom:12px;">
-                <div style="font-size:26px;font-weight:700;color:#1a1a2e;margin-bottom:4px;">
-                    {p.name}
-                </div>
-                <div style="font-size:14px;color:#374151;">
-                    Model Number : <strong>{p.model_number}</strong>
-                </div>
+    # Pick the single most specific product — longest model number wins
+    best_product = max(bedrock_r.products, key=lambda p: len(p.model_number))
+
+    st.markdown(
+        f"""
+        <div style="background:#f0fdf4;border:1px solid #86efac;border-radius:8px;
+                    padding:20px;margin-bottom:12px;">
+            <div style="font-size:26px;font-weight:700;color:#1a1a2e;margin-bottom:4px;">
+                {best_product.name}
             </div>
-            """,
-            unsafe_allow_html=True,
-        )
+            <div style="font-size:14px;color:#374151;">
+                Model Number : <strong>{best_product.model_number}</strong>
+            </div>
+        </div>
+        """,
+        unsafe_allow_html=True,
+    )
 
     # Cross-service confirmation
     st.markdown("**Confirmed across services:**")
     textract_answers = [qa.answer for qa in textract_r.query_answers if qa.answer != "NOT FOUND"]
     rekog_lines      = [t.text for t in rekog_r.text_lines]
 
-    val_rows = []
-    for p in bedrock_r.products:
-        in_textract = any(p.model_number.lower() in t.lower() for t in textract_answers)
-        in_rekog    = any(p.model_number.lower() in t.lower() for t in rekog_lines)
-        val_rows.append({
-            "Product / Model Number": f"{p.name} — {p.model_number}",
-            "Textract":               "Found" if in_textract else "Not found",
-            "Rekognition":            "Found" if in_rekog    else "Not found",
-            "Bedrock Claude":         "Found",
-        })
+    in_textract = any(best_product.model_number.lower() in t.lower() for t in textract_answers)
+    in_rekog    = any(best_product.model_number.lower() in t.lower() for t in rekog_lines)
+
+    val_rows = [{
+        "Product / Model Number": f"{best_product.name} — {best_product.model_number}",
+        "Textract":               "Found" if in_textract else "Not found",
+        "Rekognition":            "Found" if in_rekog    else "Not found",
+        "Bedrock Claude":         "Found",
+    }]
 
     st.dataframe(
         pd.DataFrame(val_rows).set_index("Product / Model Number"),

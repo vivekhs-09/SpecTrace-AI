@@ -321,6 +321,39 @@ class BedrockExtractor:
 # Orchestrator
 # ---------------------------------------------------------------------------
 
+def _deduplicate_products(products: list[ProductMatch]) -> list[ProductMatch]:
+    """
+    When the same physical product appears with different levels of specificity
+    (e.g. 'HIT HY-200' and 'HIT-HY 200-A V3'), keep only the most complete version.
+    Strategy: normalize model numbers to alphanumeric-only uppercase; if one is a
+    substring of another, the shorter one is a less-specific duplicate — drop it.
+    """
+    import re
+
+    if len(products) <= 1:
+        return products
+
+    def norm(s: str) -> str:
+        return re.sub(r"[^A-Z0-9]", "", s.upper())
+
+    keep = []
+    for i, p in enumerate(products):
+        ni = norm(p.model_number) or norm(p.name)
+        dominated = False
+        for j, q in enumerate(products):
+            if i == j:
+                continue
+            nj = norm(q.model_number) or norm(q.name)
+            # p is a less-specific duplicate if its key is a strict substring of q's key
+            if ni and nj and ni in nj and ni != nj:
+                dominated = True
+                break
+        if not dominated:
+            keep.append(p)
+
+    return keep if keep else [max(products, key=lambda p: len(p.model_number))]
+
+
 def _media_type(path: Path) -> str:
     return {
         ".png": "image/png",
@@ -405,7 +438,7 @@ class ProductExtractor:
                 TextLine(text=t, confidence=1.0)
                 for t in result.get("all_text", [])
             ]
-            products = [
+            products = _deduplicate_products([
                 ProductMatch(
                     name=p.get("name", p.get("model_number", "")),
                     model_number=p.get("model_number", ""),
@@ -413,7 +446,7 @@ class ProductExtractor:
                     context=p.get("context", ""),
                 )
                 for p in result.get("products", [])
-            ]
+            ])
             return ServiceResult(
                 service="AWS Bedrock — Claude vision",
                 latency_ms=round((time.time() - t0) * 1000, 1),
